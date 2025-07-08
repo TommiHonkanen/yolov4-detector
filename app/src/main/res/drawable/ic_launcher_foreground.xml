@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The darknet logo properly sized for adaptive icon -->
+    <!-- Adaptive icons are 108dp x 108dp total, with safe zone of 66dp diameter -->
+    <!-- Using 54dp (50% of canvas) for better visual balance -->
+    <item
+        android:drawable="@drawable/darknet_logo_blue"
+        android:width="48dp"
+        android:height="48dp"
+        android:gravity="center" />
+</layer-list>

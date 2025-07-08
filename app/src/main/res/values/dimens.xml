@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- FAB Menu -->
+    <dimen name="fab_rotation_angle">45</dimen>
+    <dimen name="fab_animation_duration">200</dimen>
+    <dimen name="fab_animation_delay">50</dimen>
+    
+    <!-- Settings Panel -->
+    <dimen name="settings_panel_width">280dp</dimen>
+    <dimen name="settings_panel_animation_duration">300</dimen>
+    
+    <!-- Detection Overlay -->
+    <dimen name="detection_text_size">14sp</dimen>
+    <dimen name="detection_stroke_width">2dp</dimen>
+    <dimen name="detection_box_corner_radius">4dp</dimen>
+    <dimen name="detection_text_padding">4dp</dimen>
+    
+    <!-- Default Thresholds -->
+    <item name="default_confidence_threshold" format="float" type="dimen">0.25</item>
+    <item name="default_nms_threshold" format="float" type="dimen">0.45</item>
+    
+    <!-- Model Card -->
+    <dimen name="model_card_corner_radius">12dp</dimen>
+    <dimen name="model_card_elevation">4dp</dimen>
+    
+    <!-- Image Processing -->
+    <item name="default_input_size" format="integer" type="integer">416</item>
+</resources>
