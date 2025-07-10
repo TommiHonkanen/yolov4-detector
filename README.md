@@ -1,4 +1,4 @@
-# YOLOv4 Detector
+# YOLOv4 Detector for Android
 
 Android app for running live object detection with YOLOv4 models on your phone's camera feed. Import your own models trained with Darknet using the Model Manager. Detection is done with OpenCV's DNN module. No need to convert the weights to another format.
 
@@ -24,7 +24,7 @@ Android app for running live object detection with YOLOv4 models on your phone's
 
 ### Option 1: Download APK
 
-Download the latest APK from the [Releases](https://github.com/TommiHonkanen/yolov4-detector/releases) page.
+Download the latest APK from the [Releases](https://github.com/TommiHonkanen/yolov4-detector-android/releases) page.
 
 ### Option 2: Build from Source
 
@@ -37,8 +37,8 @@ Download the latest APK from the [Releases](https://github.com/TommiHonkanen/yol
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/TommiHonkanen/yolov4-detector.git
-   cd yolov4-detector
+   git clone https://github.com/TommiHonkanen/yolov4-detector-android.git
+   cd yolov4-detector-android
    ```
 
 2. Open the project in Android Studio

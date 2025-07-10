@@ -3,50 +3,44 @@ package io.github.tommihonkanen.yolov4detector
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
-import io.github.tommihonkanen.yolov4detector.databinding.ActivityAboutBinding
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
+import io.github.tommihonkanen.yolov4detector.ui.screens.AboutScreen
+import io.github.tommihonkanen.yolov4detector.ui.theme.YoloDetectorTheme
 
-class AboutActivity : AppCompatActivity() {
-    private lateinit var binding: ActivityAboutBinding
+class AboutActivity : ComponentActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityAboutBinding.inflate(layoutInflater)
-        setContentView(binding.root)
         
-        setupUI()
-    }
-    
-    private fun setupUI() {
-        // Configure toolbar
-        binding.toolbar.setNavigationOnClickListener {
-            finish()
-            overridePendingTransition(R.anim.fade_in, R.anim.slide_out_down)
-        }
-        
-        // Set version name
-        try {
-            val packageInfo = packageManager.getPackageInfo(packageName, 0)
-            binding.versionText.text = "Version ${packageInfo.versionName}"
+        val versionName = try {
+            packageManager.getPackageInfo(packageName, 0).versionName
         } catch (e: Exception) {
-            binding.versionText.text = "Version 1.0.0"
+            "1.0.0"
         }
         
-        // Link clicks
-        binding.darknetLink.setOnClickListener {
-            openUrl("https://www.ccoderun.ca/programming/darknet_faq")
-        }
-        
-        binding.opencvLink.setOnClickListener {
-            openUrl("https://opencv.org/")
-        }
-        
-        binding.darknetRepoLink.setOnClickListener {
-            openUrl("https://github.com/hank-ai/darknet")
-        }
-
-        binding.yolov4DetectorLink.setOnClickListener {
-            openUrl("https://github.com/TommiHonkanen/yolov4-detector")
+        setContent {
+            YoloDetectorTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    AboutScreen(
+                        versionName = versionName,
+                        onBackClick = {
+                            finish()
+                            overridePendingTransition(R.anim.fade_in, R.anim.slide_out_down)
+                        },
+                        onLinkClick = { url ->
+                            openUrl(url)
+                        }
+                    )
+                }
+            }
         }
     }
     

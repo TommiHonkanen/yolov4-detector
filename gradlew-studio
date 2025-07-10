@@ -1,4 +1,0 @@
-#!/bin/bash
-# Wrapper script for Android Studio to use system jlink
-export PATH="/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH"
-exec ./gradlew "$@"

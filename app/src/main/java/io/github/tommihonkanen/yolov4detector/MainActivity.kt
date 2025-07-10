@@ -1,39 +1,35 @@
 package io.github.tommihonkanen.yolov4detector
 
 import android.Manifest
-import android.animation.ObjectAnimator
-import android.app.ActivityManager
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Bundle
 import android.util.Log
-import android.view.View
-import android.view.animation.DecelerateInterpolator
-import android.widget.*
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.view.PreviewView
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.*
-import io.github.tommihonkanen.yolov4detector.databinding.ActivityMainBinding
+import io.github.tommihonkanen.yolov4detector.ui.screens.MainScreen
+import io.github.tommihonkanen.yolov4detector.ui.theme.YoloDetectorTheme
 import org.opencv.android.OpenCVLoader
 import org.opencv.core.Core
 import org.opencv.core.Mat
-import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
-import java.io.File
-import java.io.FileOutputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.system.measureTimeMillis
 
-class MainActivity : AppCompatActivity() {
-    private lateinit var binding: ActivityMainBinding
+class MainActivity : ComponentActivity() {
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var yoloDetector: YoloDetector
     private lateinit var filePickerHelper: FilePickerHelper
@@ -41,22 +37,27 @@ class MainActivity : AppCompatActivity() {
     
     private var imageAnalyzer: ImageAnalysis? = null
     private var camera: Camera? = null
-    private var preview: Preview? = null
     
     private val coroutineScope = CoroutineScope(Dispatchers.Main)
     private var processingJob: Job? = null
     
     private var frameCount = 0
     private var lastFpsTime = System.currentTimeMillis()
-    private var currentFps = 0.0
-    private var detectionCount = 0
     
-    private var isFlashOn = false
-    private var isPaused = false
-    private var isFabMenuOpen = false
-    private var isSettingsPanelOpen = false
-    private var currentCameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+    // Compose state
+    private var currentFps by mutableStateOf(0)
+    private var detectionCount by mutableStateOf(0)
+    private var inferenceTimeMs by mutableStateOf(0L)
+    private var detections by mutableStateOf(listOf<Detection>())
+    private var isFlashOn by mutableStateOf(false)
+    private var isPaused by mutableStateOf(false)
+    private var currentCameraSelector by mutableStateOf(CameraSelector.DEFAULT_BACK_CAMERA)
+    private var confidenceThreshold by mutableStateOf(0.25f)
+    private var nmsThreshold by mutableStateOf(0.45f)
+    private var modelName by mutableStateOf("Not loaded")
     private var cameraProvider: ProcessCameraProvider? = null
+    private var imageWidth by mutableStateOf(0)
+    private var imageHeight by mutableStateOf(0)
     
     companion object {
         private const val TAG = "MainActivity"
@@ -75,8 +76,6 @@ class MainActivity : AppCompatActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
         
         if (!OpenCVLoader.initDebug()) {
             Log.e(TAG, "Unable to load OpenCV!")
@@ -86,166 +85,92 @@ class MainActivity : AppCompatActivity() {
         }
         
         yoloDetector = YoloDetector()
+        yoloDetector.confThreshold = confidenceThreshold
+        yoloDetector.nmsThreshold = nmsThreshold
+        
         filePickerHelper = FilePickerHelper(this)
         modelManager = ModelManager(this)
         cameraExecutor = Executors.newSingleThreadExecutor()
         
-        setupUI()
+        // Setup image analyzer
+        imageAnalyzer = ImageAnalysis.Builder()
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .build()
+            .also {
+                it.setAnalyzer(cameraExecutor, YoloImageAnalyzer())
+            }
+        
+        // Load the selected model
+        loadSelectedModel()
+        
+        setContent {
+            YoloDetectorTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    MainScreen(
+                        modelName = modelName,
+                        isPaused = isPaused,
+                        isFlashOn = isFlashOn,
+                        confidenceThreshold = confidenceThreshold,
+                        nmsThreshold = nmsThreshold,
+                        fps = currentFps,
+                        inferenceTime = inferenceTimeMs,
+                        detectionCount = detectionCount,
+                        detections = detections,
+                        imageWidth = imageWidth,
+                        imageHeight = imageHeight,
+                        cameraSelector = currentCameraSelector,
+                        onModelsClick = {
+                            val intent = Intent(this, ModelManagerActivity::class.java)
+                            modelManagerLauncher.launch(intent)
+                            overridePendingTransition(R.anim.slide_in_up, R.anim.fade_out)
+                        },
+                        onAboutClick = {
+                            val intent = Intent(this, AboutActivity::class.java)
+                            startActivity(intent)
+                            overridePendingTransition(R.anim.slide_in_up, R.anim.fade_out)
+                        },
+                        onPauseToggle = { togglePausePlay() },
+                        onFlashToggle = { toggleFlash() },
+                        onFlipCamera = { flipCamera() },
+                        onConfidenceChange = { value ->
+                            confidenceThreshold = value
+                            yoloDetector.confThreshold = value
+                        },
+                        onNmsChange = { value ->
+                            nmsThreshold = value
+                            yoloDetector.nmsThreshold = value
+                        },
+                        onThresholdReset = {
+                            confidenceThreshold = 0.25f
+                            nmsThreshold = 0.45f
+                            yoloDetector.confThreshold = 0.25f
+                            yoloDetector.nmsThreshold = 0.45f
+                            Toast.makeText(this, "Thresholds reset to defaults", Toast.LENGTH_SHORT).show()
+                        },
+                        onCameraReady = { cam ->
+                            camera = cam
+                        },
+                        cameraExecutor = cameraExecutor,
+                        imageAnalyzer = imageAnalyzer!!
+                    )
+                }
+            }
+        }
         
         if (allPermissionsGranted()) {
-            startCamera()
+            // Camera will be started from the Compose UI
         } else {
             ActivityCompat.requestPermissions(
                 this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS
             )
         }
-        
-        // Load the selected model
-        loadSelectedModel()
-    }
-    
-    private fun setupUI() {
-        // Model selection button
-        binding.btnModels.setOnClickListener {
-            val intent = Intent(this, ModelManagerActivity::class.java)
-            modelManagerLauncher.launch(intent)
-            overridePendingTransition(R.anim.slide_in_up, R.anim.fade_out)
-        }
-        
-        // About button
-        binding.btnAbout.setOnClickListener {
-            val intent = Intent(this, AboutActivity::class.java)
-            startActivity(intent)
-            overridePendingTransition(R.anim.slide_in_up, R.anim.fade_out)
-        }
-        
-        // FAB Menu setup
-        setupFABMenu()
-        
-        // Settings panel setup
-        setupSettingsPanel()
-        
-        // Threshold controls
-        setupThresholdControls()
-        
-        updateModelDisplay()
-    }
-    
-    private fun setupFABMenu() {
-        // Main FAB click - toggle pause/play
-        binding.fabMain.setOnClickListener {
-            togglePausePlay()
-        }
-        
-        // Long press to open menu
-        binding.fabMain.setOnLongClickListener {
-            toggleFABMenu()
-            true
-        }
-        
-        // Flash FAB
-        binding.fabFlash.setOnClickListener {
-            toggleFlash()
-        }
-        
-        // Flip camera FAB
-        binding.fabFlipCamera.setOnClickListener {
-            flipCamera()
-        }
-        
-        // Close menu when clicking elsewhere
-        binding.root.setOnClickListener {
-            if (isFabMenuOpen) {
-                toggleFABMenu()
-            }
-            if (isSettingsPanelOpen) {
-                toggleSettingsPanel()
-            }
-        }
-    }
-    
-    private fun setupSettingsPanel() {
-        binding.fabSettings.setOnClickListener {
-            toggleSettingsPanel()
-        }
-    }
-    
-    private fun toggleFABMenu() {
-        isFabMenuOpen = !isFabMenuOpen
-        
-        val flashContainer = binding.flashFabContainer
-        val flipContainer = binding.flipFabContainer
-        
-        if (isFabMenuOpen) {
-            // Show menu items with animation
-            flashContainer.visibility = View.VISIBLE
-            flipContainer.visibility = View.VISIBLE
-            
-            flashContainer.alpha = 0f
-            flipContainer.alpha = 0f
-            
-            flashContainer.animate().alpha(1f).setDuration(200).start()
-            flipContainer.animate().alpha(1f).setDuration(200).setStartDelay(50).start()
-            
-            // Rotate main FAB
-            binding.fabMain.animate().rotation(45f).setDuration(200).start()
-        } else {
-            // Hide menu items
-            flashContainer.animate().alpha(0f).setDuration(200).withEndAction {
-                flashContainer.visibility = View.GONE
-            }.start()
-            flipContainer.animate().alpha(0f).setDuration(200).withEndAction {
-                flipContainer.visibility = View.GONE
-            }.start()
-            
-            // Reset main FAB rotation
-            binding.fabMain.animate().rotation(0f).setDuration(200).start()
-        }
-    }
-    
-    private fun toggleSettingsPanel() {
-        isSettingsPanelOpen = !isSettingsPanelOpen
-        
-        val panel = binding.thresholdPanel
-        val targetTranslation = if (isSettingsPanelOpen) -resources.getDimension(R.dimen.settings_panel_width) else 0f
-        
-        ObjectAnimator.ofFloat(panel, "translationX", targetTranslation).apply {
-            duration = 300
-            interpolator = DecelerateInterpolator()
-            start()
-        }
-        
-        // Hide/show settings button with fade animation
-        binding.fabSettings.animate()
-            .alpha(if (isSettingsPanelOpen) 0f else 1f)
-            .setDuration(300)
-            .withEndAction {
-                if (isSettingsPanelOpen) {
-                    binding.fabSettings.visibility = View.INVISIBLE
-                } else {
-                    binding.fabSettings.visibility = View.VISIBLE
-                }
-            }
-            .start()
     }
     
     private fun togglePausePlay() {
         isPaused = !isPaused
-        binding.fabMain.setImageResource(
-            if (isPaused) android.R.drawable.ic_media_play
-            else android.R.drawable.ic_media_pause
-        )
-        
-        if (isPaused) {
-            cameraProvider?.unbindAll()
-        } else {
-            startCamera()
-        }
-        
-        // Close FAB menu if open
-        if (isFabMenuOpen) {
-            toggleFABMenu()
-        }
     }
     
     private fun toggleFlash() {
@@ -253,14 +178,6 @@ class MainActivity : AppCompatActivity() {
             if (cam.cameraInfo.hasFlashUnit()) {
                 isFlashOn = !isFlashOn
                 cam.cameraControl.enableTorch(isFlashOn)
-                binding.fabFlash.setImageResource(
-                    if (isFlashOn) R.drawable.ic_flash_on
-                    else R.drawable.ic_flash_off
-                )
-                binding.fabFlash.imageTintList = ContextCompat.getColorStateList(this, 
-                    if (isFlashOn) R.color.warning_yellow
-                    else R.color.md_theme_onSurface
-                )
             } else {
                 Toast.makeText(this, "Flash not available", Toast.LENGTH_SHORT).show()
             }
@@ -273,54 +190,11 @@ class MainActivity : AppCompatActivity() {
         } else {
             CameraSelector.DEFAULT_BACK_CAMERA
         }
-        startCamera()
-        
-        // Close FAB menu
-        if (isFabMenuOpen) {
-            toggleFABMenu()
-        }
-    }
-    
-    private fun setupThresholdControls() {
-        // Confidence threshold
-        binding.confidenceSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                val value = progress / 100f
-                binding.confidenceValue.text = "${progress}%"
-                yoloDetector.confThreshold = value
-            }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-        })
-        
-        // NMS threshold
-        binding.nmsSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                val value = progress / 100f
-                binding.nmsValue.text = "${progress}%"
-                yoloDetector.nmsThreshold = value
-            }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-        })
-        
-        // Set initial values
-        binding.confidenceSeekBar.progress = (yoloDetector.confThreshold * 100).toInt()
-        binding.nmsSeekBar.progress = (yoloDetector.nmsThreshold * 100).toInt()
-        
-        // Reset button
-        binding.btnResetThresholds.setOnClickListener {
-            binding.confidenceSeekBar.progress = 25 // Default 0.25
-            binding.nmsSeekBar.progress = 45 // Default 0.45
-            yoloDetector.confThreshold = 0.25f
-            yoloDetector.nmsThreshold = 0.45f
-            Toast.makeText(this, "Thresholds reset to defaults", Toast.LENGTH_SHORT).show()
-        }
     }
     
     private fun updateModelDisplay() {
         val model = modelManager.getSelectedModel()
-        binding.currentModelName.text = model?.name ?: "Not loaded"
+        modelName = model?.name ?: "Not loaded"
     }
     
     private fun loadSelectedModel() {
@@ -347,39 +221,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
-    private fun startCamera() {
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
-        
-        cameraProviderFuture.addListener({
-            cameraProvider = cameraProviderFuture.get()
-            
-            // Set scale type to FIT_CENTER for consistent coordinate mapping
-            binding.cameraPreview.scaleType = PreviewView.ScaleType.FIT_CENTER
-            
-            preview = Preview.Builder()
-                .build()
-                .also {
-                    it.setSurfaceProvider(binding.cameraPreview.surfaceProvider)
-                }
-            
-            imageAnalyzer = ImageAnalysis.Builder()
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .build()
-                .also {
-                    it.setAnalyzer(cameraExecutor, YoloImageAnalyzer())
-                }
-            
-            try {
-                cameraProvider?.unbindAll()
-                camera = cameraProvider?.bindToLifecycle(
-                    this, currentCameraSelector, preview!!, imageAnalyzer!!
-                )
-            } catch (exc: Exception) {
-                Log.e(TAG, "Use case binding failed", exc)
-            }
-            
-        }, ContextCompat.getMainExecutor(this))
-    }
     
     private inner class YoloImageAnalyzer : ImageAnalysis.Analyzer {
         override fun analyze(image: ImageProxy) {
@@ -403,25 +244,27 @@ class MainActivity : AppCompatActivity() {
                         else -> mat.copyTo(rotatedMat)
                     }
                     
-                    val detections = withContext(Dispatchers.IO) {
+                    val newDetections = withContext(Dispatchers.IO) {
                         yoloDetector.detect(rotatedMat)
                     }
                     
                     withContext(Dispatchers.Main) {
-                        // Pass the rotated dimensions and rotation info
+                        // Update Compose state
+                        detections = newDetections
+                        detectionCount = newDetections.size
+                        // Update image dimensions based on rotation
                         val width = if (rotationDegrees == 90 || rotationDegrees == 270) image.height else image.width
                         val height = if (rotationDegrees == 90 || rotationDegrees == 270) image.width else image.height
-                        binding.detectionOverlay.setDetections(detections, width, height, binding.cameraPreview)
-                        
-                        // Update detection count
-                        detectionCount = detections.size
+                        imageWidth = width
+                        imageHeight = height
                     }
                     
                     mat.release()
                     rotatedMat.release()
                 }
                 
-                updateStats(inferenceTime)
+                inferenceTimeMs = inferenceTime
+                updateStats()
                 image.close()
             }
         }
@@ -464,21 +307,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
-    private fun updateStats(inferenceTime: Long) {
+    private fun updateStats() {
         frameCount++
         val currentTime = System.currentTimeMillis()
         val timeDiff = currentTime - lastFpsTime
         
         if (timeDiff >= 1000) {
-            currentFps = frameCount * 1000.0 / timeDiff
+            currentFps = (frameCount * 1000.0 / timeDiff).toInt()
             frameCount = 0
             lastFpsTime = currentTime
-        }
-        
-        runOnUiThread {
-            binding.fpsText.text = "${currentFps.toInt()} FPS"
-            binding.inferenceText.text = "${inferenceTime}ms"
-            binding.detectionCountText.text = "$detectionCount objects"
         }
     }
     
@@ -492,7 +329,7 @@ class MainActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_CODE_PERMISSIONS) {
             if (allPermissionsGranted()) {
-                startCamera()
+                // Camera will be started from the Compose UI
             } else {
                 Toast.makeText(this, "Permissions not granted by the user.", Toast.LENGTH_SHORT).show()
                 finish()

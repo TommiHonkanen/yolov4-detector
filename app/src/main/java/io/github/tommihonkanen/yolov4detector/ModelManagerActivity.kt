@@ -5,37 +5,37 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
 import android.widget.EditText
-import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
+import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
 import kotlinx.coroutines.*
-import io.github.tommihonkanen.yolov4detector.databinding.ActivityModelManagerBinding
-import io.github.tommihonkanen.yolov4detector.databinding.ItemModelBinding
+import io.github.tommihonkanen.yolov4detector.ui.screens.ImportModelDialog
+import io.github.tommihonkanen.yolov4detector.ui.screens.ModelManagerScreen
+import io.github.tommihonkanen.yolov4detector.ui.theme.YoloDetectorTheme
 import java.io.File
 import java.io.FileOutputStream
-import androidx.activity.OnBackPressedCallback
 
-class ModelManagerActivity : AppCompatActivity() {
-    private lateinit var binding: ActivityModelManagerBinding
+class ModelManagerActivity : ComponentActivity() {
     private lateinit var modelManager: ModelManager
-    private lateinit var adapter: ModelAdapter
     private lateinit var filePickerHelper: FilePickerHelper
     private val coroutineScope = CoroutineScope(Dispatchers.Main)
     
+    private var models by mutableStateOf(listOf<ModelInfo>())
+    private var selectedId by mutableStateOf("")
+    private var showImportDialog by mutableStateOf(false)
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityModelManagerBinding.inflate(layoutInflater)
-        setContentView(binding.root)
         
         modelManager = ModelManager(this)
         filePickerHelper = FilePickerHelper(this)
         
-        setupUI()
         loadModels()
         
         // Handle back press with animation
@@ -45,50 +45,59 @@ class ModelManagerActivity : AppCompatActivity() {
                 overridePendingTransition(R.anim.fade_in, R.anim.slide_out_down)
             }
         })
-    }
-    
-    private fun setupUI() {
-        // Setup toolbar
-        binding.toolbar.setNavigationOnClickListener {
-            finish()
-            overridePendingTransition(R.anim.fade_in, R.anim.slide_out_down)
-        }
         
-        adapter = ModelAdapter(
-            onModelClick = { model ->
-                modelManager.setSelectedModel(model.id)
-                setResult(RESULT_OK)
-                loadModels()
-            },
-            onDeleteClick = { model ->
-                if (model.isDefault) {
-                    showMessage("Cannot delete default model")
-                } else {
-                    confirmDelete(model)
-                }
-            },
-            onRenameClick = { model ->
-                if (!model.isDefault) {
-                    showRenameDialog(model)
+        setContent {
+            YoloDetectorTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    ModelManagerScreen(
+                        models = models,
+                        selectedModelId = selectedId,
+                        onBackClick = {
+                            finish()
+                            overridePendingTransition(R.anim.fade_in, R.anim.slide_out_down)
+                        },
+                        onModelSelect = { model ->
+                            modelManager.setSelectedModel(model.id)
+                            setResult(RESULT_OK)
+                            loadModels()
+                        },
+                        onModelRename = { model ->
+                            if (!model.isDefault) {
+                                showRenameDialog(model)
+                            }
+                        },
+                        onModelDelete = { model ->
+                            if (model.isDefault) {
+                                showMessage("Cannot delete default model")
+                            } else {
+                                confirmDelete(model)
+                            }
+                        },
+                        onImportClick = {
+                            showImportDialog = true
+                        }
+                    )
+                    
+                    if (showImportDialog) {
+                        ImportModelDialog(
+                            onDismiss = { showImportDialog = false },
+                            onStartImport = {
+                                showImportDialog = false
+                                startImportProcess()
+                            }
+                        )
+                    }
                 }
             }
-        )
-        
-        binding.recyclerView.layoutManager = LinearLayoutManager(this)
-        binding.recyclerView.adapter = adapter
-        
-        binding.fabAdd.setOnClickListener {
-            showImportDialog()
         }
     }
     
     private fun loadModels() {
-        val models = modelManager.getAllModels()
-        val selectedId = modelManager.getSelectedModelId()
-        adapter.submitList(models, selectedId)
-        
-        binding.emptyView.visibility = if (models.isEmpty()) View.VISIBLE else View.GONE
-        binding.recyclerView.visibility = if (models.isEmpty()) View.GONE else View.VISIBLE
+        models = modelManager.getAllModels()
+        selectedId = modelManager.getSelectedModelId()
     }
     
     private fun confirmDelete(model: ModelInfo) {
@@ -126,18 +135,7 @@ class ModelManagerActivity : AppCompatActivity() {
     
     private fun showMessage(message: String) {
         com.google.android.material.snackbar.Snackbar
-            .make(binding.root, message, com.google.android.material.snackbar.Snackbar.LENGTH_SHORT)
-            .show()
-    }
-    
-    private fun showImportDialog() {
-        AlertDialog.Builder(this)
-            .setTitle("Import Model")
-            .setMessage("To import a model, you need:\n• .weights file (model weights)\n• .cfg file (configuration)\n• .names file (class names)\n\nYou'll be prompted to select each file. They can be selected in any order.")
-            .setPositiveButton("Start Import") { _, _ ->
-                startImportProcess()
-            }
-            .setNegativeButton("Cancel", null)
+            .make(findViewById(android.R.id.content), message, com.google.android.material.snackbar.Snackbar.LENGTH_SHORT)
             .show()
     }
     
@@ -335,92 +333,5 @@ class ModelManagerActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         coroutineScope.cancel()
-    }
-}
-
-class ModelAdapter(
-    private val onModelClick: (ModelInfo) -> Unit,
-    private val onDeleteClick: (ModelInfo) -> Unit,
-    private val onRenameClick: (ModelInfo) -> Unit
-) : RecyclerView.Adapter<ModelAdapter.ModelViewHolder>() {
-    
-    private var models = listOf<ModelInfo>()
-    private var selectedId = ""
-    
-    fun submitList(newModels: List<ModelInfo>, selectedModelId: String) {
-        models = newModels
-        selectedId = selectedModelId
-        notifyDataSetChanged()
-    }
-    
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ModelViewHolder {
-        val binding = ItemModelBinding.inflate(
-            LayoutInflater.from(parent.context), parent, false
-        )
-        return ModelViewHolder(binding)
-    }
-    
-    override fun onBindViewHolder(holder: ModelViewHolder, position: Int) {
-        holder.bind(models[position], models[position].id == selectedId)
-    }
-    
-    override fun getItemCount() = models.size
-    
-    inner class ModelViewHolder(private val binding: ItemModelBinding) : 
-        RecyclerView.ViewHolder(binding.root) {
-        
-        fun bind(model: ModelInfo, isSelected: Boolean) {
-            binding.modelName.text = model.name
-            binding.modelInfo.text = "${model.inputSize}x${model.inputSize} • ${model.numClasses} classes"
-            
-            if (model.isDefault) {
-                binding.defaultBadge.visibility = View.VISIBLE
-            } else {
-                binding.defaultBadge.visibility = View.GONE
-            }
-            
-            if (isSelected) {
-                binding.root.setCardBackgroundColor(
-                    binding.root.context.getColor(R.color.accent_blue)
-                )
-                binding.modelName.setTextColor(
-                    binding.root.context.getColor(android.R.color.white)
-                )
-                binding.modelInfo.setTextColor(
-                    binding.root.context.getColor(android.R.color.white)
-                )
-            } else {
-                binding.root.setCardBackgroundColor(
-                    binding.root.context.getColor(R.color.primary_medium)
-                )
-                binding.modelName.setTextColor(
-                    binding.root.context.getColor(R.color.text_primary)
-                )
-                binding.modelInfo.setTextColor(
-                    binding.root.context.getColor(R.color.text_secondary)
-                )
-            }
-            
-            binding.root.setOnClickListener {
-                onModelClick(model)
-            }
-            
-            binding.deleteButton.setOnClickListener {
-                onDeleteClick(model)
-            }
-            
-            binding.renameButton.setOnClickListener {
-                onRenameClick(model)
-            }
-            
-            // Hide action buttons for default model
-            if (model.isDefault) {
-                binding.deleteButton.visibility = View.GONE
-                binding.renameButton.visibility = View.GONE
-            } else {
-                binding.deleteButton.visibility = View.VISIBLE
-                binding.renameButton.visibility = View.VISIBLE
-            }
-        }
     }
 }

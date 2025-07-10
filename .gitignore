@@ -1,12 +1,7 @@
 *.iml
 .gradle
 /local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
+/.idea/
 .DS_Store
 /build
 /captures
@@ -15,3 +10,35 @@
 local.properties
 /.claude
 CLAUDE.md
+
+# Gradle wrapper custom scripts
+gradlew-studio
+
+# APK files
+*.apk
+*.apk.idsig
+*.aab
+
+# Keystore files
+*.jks
+*.keystore
+
+# Android Studio captures folder
+captures/
+
+# IntelliJ
+*.ipr
+*.iws
+
+# Gradle files
+.gradle/
+build/
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# Log/OS Files
+*.log
+
+# Android Profiling
+*.hprof
