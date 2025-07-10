@@ -20,7 +20,7 @@ class AboutActivity : ComponentActivity() {
         val versionName = try {
             packageManager.getPackageInfo(packageName, 0).versionName
         } catch (e: Exception) {
-            "1.0.0"
+            "1.1.0"
         }
         
         setContent {
