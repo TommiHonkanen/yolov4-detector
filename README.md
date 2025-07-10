@@ -73,13 +73,14 @@ Download the latest APK from the [Releases](https://github.com/TommiHonkanen/yol
 
 ### Controls
 
-- **Main FAB (Floating Action Button)**:
-  - Tap: Pause/Resume detection
-  - Long press: Open quick actions menu
-- **Flash**: Toggle camera flash on/off
-- **Flip Camera**: Switch between front and back cameras
-- **Settings**: Adjust detection thresholds
-- **Models**: Access model manager
+- **Bottom FAB buttons** (left to right):
+  - **Flash**: Toggle camera flash on/off
+  - **Flip Camera**: Switch between front and back cameras
+  - **Pause/Play**: Pause or resume detection and camera preview
+- **Settings button** (right side): Opens threshold adjustment panel
+- **Top bar buttons**:
+  - **Models**: Access model manager
+  - **About**: View app information
 
 ### Threshold Settings
 
@@ -115,18 +116,26 @@ The app supports Darknet YOLO format models. Tested configurations:
 
 ### Core Components
 
-- **MainActivity**: Camera management and UI
+- **MainActivity**: Camera lifecycle and image analysis coordination
 - **YoloDetector**: YOLO inference engine using OpenCV DNN
 - **ModelManager**: Model storage and configuration
-- **DetectionOverlayView**: Real-time visualization
+- **UI Components** (Jetpack Compose):
+  - **MainScreen**: Camera preview with detection overlay
+  - **ModelManagerScreen**: Model import and management
+  - **AboutScreen**: App information and links
+  - **DetectionOverlay**: Real-time visualization using Canvas
+  - **FABMenu**: Camera controls (pause, flash, flip)
+  - **ThresholdPanel**: Adjustable detection settings
 
 ### Technical Stack
 
 - **Language**: Kotlin
+- **UI Framework**: Jetpack Compose
 - **Camera**: CameraX API
 - **ML Framework**: OpenCV DNN module
-- **UI**: Material Design 3
+- **Design System**: Material Design 3
 - **Architecture**: MVVM pattern with Coroutines
+- **State Management**: Compose State and MutableState
 
 ## Performance
 
